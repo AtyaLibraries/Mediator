@@ -1,7 +1,11 @@
 using System.Collections.Immutable;
+using System.Linq;
+using System.Reflection;
 using Atya.Application.Mediator.SourceGeneration;
+using Atya.Foundation.Results;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Atya.Application.Mediator.UnitTests;
 
@@ -152,9 +156,20 @@ public sealed class MediatorRegistrationSourceGeneratorTests
         return driver.GetRunResult();
     }
 
-    private static IEnumerable<MetadataReference> GetMetadataReferences() =>
-        AppDomain.CurrentDomain
+    private static IEnumerable<MetadataReference> GetMetadataReferences()
+    {
+        Assembly[] requiredAssemblies =
+        [
+            typeof(IMediator).Assembly,
+            typeof(Result).Assembly,
+            typeof(IServiceCollection).Assembly,
+        ];
+
+        return AppDomain.CurrentDomain
             .GetAssemblies()
+            .Concat(requiredAssemblies)
             .Where(static assembly => !assembly.IsDynamic && !string.IsNullOrWhiteSpace(assembly.Location))
+            .DistinctBy(static assembly => assembly.Location)
             .Select(static assembly => MetadataReference.CreateFromFile(assembly.Location));
+    }
 }
