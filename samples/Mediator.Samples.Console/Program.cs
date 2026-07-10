@@ -15,8 +15,7 @@ public static class Program
     public static async Task Main()
     {
         ServiceCollection services = new();
-        services.AddAtyaMediator(builder =>
-            builder.AddRequestHandler<CreateGreeting, string, CreateGreetingHandler>());
+        services.AddAtyaMediator();
 
         using ServiceProvider provider = services.BuildServiceProvider();
         IMediator mediator = provider.GetRequiredService<IMediator>();
@@ -26,10 +25,17 @@ public static class Program
         Console.WriteLine(result.IsSuccess ? result.Value : result.Error.Message);
     }
 
-    private sealed record class CreateGreeting(string Name) : IRequest<string>;
+    /// <summary>
+    /// Sample request handled by the generated registration.
+    /// </summary>
+    public sealed record class CreateGreeting(string Name) : IRequest<string>;
 
-    private sealed class CreateGreetingHandler : IRequestHandler<CreateGreeting, string>
+    /// <summary>
+    /// Sample request handler discovered by the source generator.
+    /// </summary>
+    public sealed class CreateGreetingHandler : IRequestHandler<CreateGreeting, string>
     {
+        /// <inheritdoc />
         public ValueTask<Result<string>> Handle(CreateGreeting request, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Result.Success($"Hello, {request.Name}."));
     }

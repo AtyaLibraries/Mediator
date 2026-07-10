@@ -13,17 +13,19 @@ public static class MediatorServiceCollectionExtensions
     /// Adds the mediator runtime and request handlers to the service collection.
     /// </summary>
     /// <param name="services">The service collection to update.</param>
-    /// <param name="configure">Optional handler-registration callback.</param>
+    /// <param name="configure">Handler-registration callback.</param>
     /// <returns>The updated service collection.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
     public static IServiceCollection AddAtyaMediator(
         this IServiceCollection services,
-        Action<MediatorRegistrationBuilder>? configure = null)
+        Action<MediatorRegistrationBuilder> configure)
     {
         Guard.AgainstNull(services);
+        Guard.AgainstNull(configure);
 
         services.TryAddScoped<IMediator, Mediator>();
-        configure?.Invoke(new MediatorRegistrationBuilder(services));
+        configure(new MediatorRegistrationBuilder(services));
 
         return services;
     }

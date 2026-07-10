@@ -17,9 +17,19 @@ public sealed class MediatorRegistrationBuilderTests
     {
         IServiceCollection services = null!;
 
-        Action act = () => services.AddAtyaMediator();
+        Action act = () => services.AddAtyaMediator(_ => { });
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("services");
+    }
+
+    [Fact]
+    public void AddAtyaMediator_NullConfigure_Throws()
+    {
+        ServiceCollection services = new();
+
+        Action act = () => services.AddAtyaMediator(null!);
+
+        act.Should().Throw<ArgumentNullException>().WithParameterName("configure");
     }
 
     [Fact]
@@ -48,7 +58,7 @@ public sealed class MediatorRegistrationBuilderTests
     public void AddAtyaMediator_DuplicateUntypedDispatcher_ThrowsWhenMediatorIsResolved()
     {
         ServiceCollection services = new();
-        services.AddAtyaMediator();
+        services.AddAtyaMediator(_ => { });
         services.AddSingleton<IMediatorRequestDispatcher>(new DuplicatePingDispatcher());
         services.AddSingleton<IMediatorRequestDispatcher>(new DuplicatePingDispatcher());
         using ServiceProvider provider = services.BuildServiceProvider();
@@ -62,7 +72,7 @@ public sealed class MediatorRegistrationBuilderTests
     public void AddAtyaMediator_DuplicateTypedDispatcher_ThrowsWhenMediatorIsResolved()
     {
         ServiceCollection services = new();
-        services.AddAtyaMediator();
+        services.AddAtyaMediator(_ => { });
         services.AddSingleton<IMediatorResponseDispatcher>(new DuplicateEchoDispatcher());
         services.AddSingleton<IMediatorResponseDispatcher>(new DuplicateEchoDispatcher());
         using ServiceProvider provider = services.BuildServiceProvider();
