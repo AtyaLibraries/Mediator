@@ -36,6 +36,44 @@ Install-Package Atya.Application.Mediator
 <PackageReference Include="Atya.Application.Mediator" Version="<latest-stable>" />
 ```
 
+## MediatR Migration Guide
+
+The intended migration path keeps the call site familiar while making registration compile-time generated and results explicit:
+
+```csharp
+using Atya.Application.Mediator;
+using Atya.Foundation.Results;
+using Microsoft.Extensions.DependencyInjection;
+
+ServiceCollection services = new();
+services.AddAtyaMediator();
+
+using ServiceProvider provider = services.BuildServiceProvider();
+IMediator mediator = provider.GetRequiredService<IMediator>();
+
+Result<CustomerSummary> result = await mediator.Send(new GetCustomer(customerId));
+```
+
+Define requests and handlers with Atya contracts:
+
+```csharp
+public sealed record class GetCustomer(Guid CustomerId) : IRequest<CustomerSummary>;
+
+public sealed class GetCustomerHandler : IRequestHandler<GetCustomer, CustomerSummary>
+{
+    public ValueTask<Result<CustomerSummary>> Handle(GetCustomer request, CancellationToken cancellationToken)
+    {
+        CustomerSummary summary = new(request.CustomerId, "Atya");
+
+        return ValueTask.FromResult(Result.Success(summary));
+    }
+}
+
+public sealed record class CustomerSummary(Guid CustomerId, string Name);
+```
+
+The source generator discovers concrete handlers during compilation and emits the handler registrations behind `AddAtyaMediator()`. No assembly scanning is performed at startup.
+
 ## Quick Start
 
 ```csharp
