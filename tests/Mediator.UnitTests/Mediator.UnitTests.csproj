@@ -3,8 +3,10 @@
   <!-- Framework, analyzers, and default test packages are provided by Atya.Build.Sdk. -->
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <ProjectReference Include="..\..\src\Mediator\Mediator.csproj" />
+    <ProjectReference Include="..\..\src\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" />
   </ItemGroup>
 
 </Project>

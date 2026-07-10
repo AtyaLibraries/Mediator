@@ -43,31 +43,76 @@ public sealed class MediatorTests
     }
 
     [Fact]
-    public async Task Send_UntypedRequestWithoutHandler_ReturnsNotRegisteredFailure()
+    public async Task Send_InferenceUntypedRegisteredHandler_ReturnsHandlerResult()
     {
-        IMediator mediator = CreateMediator();
+        IMediator mediator = CreateMediator(builder =>
+            builder.AddRequestHandler<PingCommand, PingCommandHandler>());
 
-        Result result = await mediator.Send(new PingCommand(), TestContext.Current.CancellationToken);
+        Result result = await mediator.Send((IRequest)new PingCommand(), TestContext.Current.CancellationToken);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be(MediatorErrors.HandlerNotRegisteredCode);
-        result.Error.Kind.Should().Be(ErrorKind.NotFound);
-        result.Error.Target.Should().Be(typeof(PingCommand).FullName);
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Send_TypedRequestWithoutHandler_ReturnsNotRegisteredFailure()
+    public async Task Send_InferenceTypedRegisteredHandler_ReturnsHandlerResult()
+    {
+        IMediator mediator = CreateMediator(builder =>
+            builder.AddRequestHandler<EchoQuery, string, EchoQueryHandler>());
+
+        Result<string> result = await mediator.Send((IRequest<string>)new EchoQuery("atya"), TestContext.Current.CancellationToken);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be("atya");
+    }
+
+    [Fact]
+    public async Task Send_UntypedRequestWithoutHandler_Throws()
     {
         IMediator mediator = CreateMediator();
 
-        Result<string> result = await mediator.Send<EchoQuery, string>(
+        Func<Task> act = async () => await mediator.Send(new PingCommand(), TestContext.Current.CancellationToken);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*PingCommand*Register the handler*");
+    }
+
+    [Fact]
+    public async Task Send_TypedRequestWithoutHandler_Throws()
+    {
+        IMediator mediator = CreateMediator();
+
+        Func<Task> act = async () => await mediator.Send<EchoQuery, string>(
             new EchoQuery("atya"),
             TestContext.Current.CancellationToken);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be(MediatorErrors.HandlerNotRegisteredCode);
-        result.Error.Kind.Should().Be(ErrorKind.NotFound);
-        result.Error.Target.Should().Be(typeof(EchoQuery).FullName);
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*EchoQuery*Register the handler*");
+    }
+
+    [Fact]
+    public async Task Send_InferenceUntypedRequestWithoutHandler_Throws()
+    {
+        IMediator mediator = CreateMediator();
+
+        Func<Task> act = async () => await mediator.Send((IRequest)new PingCommand(), TestContext.Current.CancellationToken);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*PingCommand*Register the handler*");
+    }
+
+    [Fact]
+    public async Task Send_InferenceTypedRequestWithoutHandler_Throws()
+    {
+        IMediator mediator = CreateMediator();
+
+        Func<Task> act = async () => await mediator.Send((IRequest<string>)new EchoQuery("atya"), TestContext.Current.CancellationToken);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*EchoQuery*Register the handler*");
     }
 
     [Fact]
@@ -75,7 +120,7 @@ public sealed class MediatorTests
     {
         IMediator mediator = CreateMediator();
 
-        Func<Task> act = async () => await mediator.Send<PingCommand>(null!, TestContext.Current.CancellationToken);
+        Func<Task> act = async () => await mediator.Send((PingCommand)null!, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentNullException>().WithParameterName("request");
     }
@@ -106,7 +151,7 @@ public sealed class MediatorTests
     private static IMediator CreateMediator(Action<MediatorRegistrationBuilder>? configure = null)
     {
         ServiceCollection services = new();
-        services.AddAtyaMediator(configure);
+        services.AddAtyaMediator(configure ?? (_ => { }));
 
         return services.BuildServiceProvider().GetRequiredService<IMediator>();
     }

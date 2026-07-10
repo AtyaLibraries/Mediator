@@ -24,8 +24,7 @@ public class MediatorDispatchBenchmarks
         _handler = new DirectEchoHandler();
 
         ServiceCollection services = new();
-        services.AddAtyaMediator(builder =>
-            builder.AddRequestHandler<EchoQuery, string, DirectEchoHandler>());
+        services.AddAtyaMediator();
 
         _mediator = services.BuildServiceProvider().GetRequiredService<IMediator>();
     }
@@ -43,13 +42,28 @@ public class MediatorDispatchBenchmarks
     /// </summary>
     /// <returns>The mediator result.</returns>
     [Benchmark]
-    public ValueTask<Result<string>> MediatorSend() =>
+    public ValueTask<Result<string>> MediatorSendGenericFastPath() =>
         _mediator.Send<EchoQuery, string>(_request, CancellationToken.None);
 
-    private sealed record class EchoQuery(string Value) : IRequest<string>;
+    /// <summary>
+    /// Dispatches through the inference-friendly runtime-type lookup path.
+    /// </summary>
+    /// <returns>The mediator result.</returns>
+    [Benchmark]
+    public ValueTask<Result<string>> MediatorSendInferencePath() =>
+        _mediator.Send((IRequest<string>)_request, CancellationToken.None);
 
-    private sealed class DirectEchoHandler : IRequestHandler<EchoQuery, string>
+    /// <summary>
+    /// Benchmark request discovered by the source generator.
+    /// </summary>
+    public sealed record class EchoQuery(string Value) : IRequest<string>;
+
+    /// <summary>
+    /// Benchmark handler discovered by the source generator.
+    /// </summary>
+    public sealed class DirectEchoHandler : IRequestHandler<EchoQuery, string>
     {
+        /// <inheritdoc />
         public ValueTask<Result<string>> Handle(EchoQuery request, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Result.Success(request.Value));
     }
