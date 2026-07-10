@@ -24,12 +24,17 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\Mediator.SourceGeneration\bin\$(Configuration)\netstandard2.0\Atya.Application.Mediator.SourceGeneration.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup Label="Runtime dependency">
     <PackageReference Include="Atya.Foundation.Guards" />
     <PackageReference Include="Atya.Foundation.Results" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup Label="Analyzer dependency">
+    <ProjectReference Include="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

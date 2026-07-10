@@ -11,15 +11,16 @@ Source-generated, reflection-free mediator contracts and dispatch for .NET appli
 
 `Atya.Application.Mediator` provides a small application-layer mediator for codebases that want explicit request and handler contracts without runtime assembly scanning. Handlers return `Result` or `Result<T>` so expected application outcomes stay in the Atya Results model instead of exceptions or framework-specific response objects.
 
-The package is intentionally narrow: it owns request dispatch and registration shape. Validation, ProblemDetails mapping, endpoint filters, persistence, and pipeline frameworks stay in their owning packages or in the platform.
+The package is intentionally narrow: it owns request dispatch, compile-time handler registration, and DI wiring. Validation, ProblemDetails mapping, endpoint filters, persistence, notifications, and pipeline behavior frameworks stay outside v1.
 
 ## Features
 
 - Result-first request contracts for commands and queries.
-- DI registration through `AddAtyaMediator`.
-- Reflection-free handler registration through `MediatorRegistrationBuilder`.
-- Source-generator-ready registration surface for generated code.
-- Stable failure code when a request has no registered handler.
+- Inference-friendly `await mediator.Send(query)` call sites.
+- Source-generated `services.AddAtyaMediator()` registration for compile-time-discovered handlers.
+- Reflection-free runtime dispatch through frozen runtime-type lookup tables.
+- Duplicate handler diagnostics at compile time.
+- Manual `MediatorRegistrationBuilder` registration as an escape hatch.
 
 ## Installation
 
@@ -43,13 +44,12 @@ using Atya.Foundation.Results;
 using Microsoft.Extensions.DependencyInjection;
 
 ServiceCollection services = new();
-services.AddAtyaMediator(builder =>
-    builder.AddRequestHandler<CreateGreeting, string, CreateGreetingHandler>());
+services.AddAtyaMediator();
 
 using ServiceProvider provider = services.BuildServiceProvider();
 IMediator mediator = provider.GetRequiredService<IMediator>();
 
-Result<string> result = await mediator.Send<CreateGreeting, string>(new CreateGreeting("Atya"));
+Result<string> result = await mediator.Send(new CreateGreeting("Atya"));
 
 Console.WriteLine(result.IsSuccess ? result.Value : result.Error.Message);
 
@@ -94,9 +94,35 @@ public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderSummary>
 public sealed record class OrderSummary(Guid OrderId);
 ```
 
+## Sending Requests
+
+Use inference-friendly overloads for normal call sites:
+
+```csharp
+Result archive = await mediator.Send(new ArchiveOrder(orderId));
+Result<OrderSummary> order = await mediator.Send(new GetOrder(orderId));
+```
+
+The two-generic overloads remain available as explicit fast paths:
+
+```csharp
+Result archive = await mediator.Send<ArchiveOrder>(new ArchiveOrder(orderId));
+Result<OrderSummary> order = await mediator.Send<GetOrder, OrderSummary>(new GetOrder(orderId));
+```
+
+Missing handlers are configuration errors. `IMediator.Send` throws `InvalidOperationException` naming the request type and the registration fix when no handler is registered. Missing and duplicate registrations are treated consistently as configuration failures, not Result failures.
+
 ## Registration
 
-Register the runtime once and add request handlers through the builder:
+In normal applications, call the generated one-line registration:
+
+```csharp
+services.AddAtyaMediator();
+```
+
+The package includes a Roslyn source generator packaged as an analyzer asset. It discovers concrete `IRequestHandler<TRequest>` and `IRequestHandler<TRequest,TResponse>` implementations at compile time and emits deterministic registration code. If more than one handler targets the same request/response shape, the generator reports `ATYAMEDIATOR001` as a compile-time error.
+
+Manual registration remains available for tests and advanced composition:
 
 ```csharp
 services.AddAtyaMediator(builder =>
@@ -106,21 +132,19 @@ services.AddAtyaMediator(builder =>
 });
 ```
 
-The builder is the source-generator contract. Generated registration code is expected to emit calls to the same `AddRequestHandler` methods after discovering concrete `IRequestHandler<...>` implementations at compile time. The runtime does not scan assemblies or use reflection to discover handlers.
+Manual registration uses the same runtime dispatcher bridge as generated registration. The runtime does not scan assemblies.
 
-Generated code should be deterministic, register each request once, and fail compilation when multiple handlers target the same request and response shape. Infrastructure dispatcher interfaces are public only so generated code and package consumers can compose registrations without reflection; they are marked hidden from editor browsing.
+## Deliberate Omissions
 
-## Error Codes
-
-| Code | Kind | Meaning |
-| --- | --- | --- |
-| `atya.application.mediator.handler_not_registered` | `NotFound` | No handler dispatcher is registered for the request type sent to `IMediator`. |
+v1 deliberately does not include pipeline behaviors, notifications, streaming requests, or handler lifetime policies beyond DI registration. Pipeline behaviors are planned as an additive `1.1.0` feature after the v1 dispatch and source-generation surface is stable.
 
 ## Why These Dependencies
 
 - `Atya.Foundation.Guards` validates public entry points and configuration arguments.
 - `Atya.Foundation.Results` is the package's expected-outcome model.
 - `Microsoft.Extensions.DependencyInjection.Abstractions` provides the DI registration surface without forcing a concrete container.
+
+The Roslyn source generator is packaged as an analyzer asset and does not add runtime dependencies to consuming applications.
 
 ## Compatibility
 
