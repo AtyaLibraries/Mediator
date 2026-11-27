@@ -1,24 +1,22 @@
-using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using Atya.Foundation.Guards;
 using Atya.Foundation.Results;
 
 namespace Atya.Application.Mediator;
 
+/// <summary>
+/// Scoped mediator. It holds the shared map and the current scope's provider, so resolving it constructs no handlers;
+/// each send resolves exactly one handler from the ambient scope, whose container owns its disposal.
+/// </summary>
 internal sealed class Mediator : IMediator
 {
-    private readonly FrozenDictionary<Type, IMediatorRequestDispatcher> _requestDispatchers;
-    private readonly FrozenDictionary<(Type Request, Type Response), IMediatorResponseDispatcher> _responseDispatchers;
+    private readonly MediatorMap _map;
+    private readonly IServiceProvider _services;
 
-    public Mediator(
-        IEnumerable<IMediatorRequestDispatcher> requestDispatchers,
-        IEnumerable<IMediatorResponseDispatcher> responseDispatchers)
+    public Mediator(MediatorMap map, IServiceProvider services)
     {
-        Guard.AgainstNull(requestDispatchers);
-        Guard.AgainstNull(responseDispatchers);
-
-        _requestDispatchers = BuildRequestDispatchers(requestDispatchers);
-        _responseDispatchers = BuildResponseDispatchers(responseDispatchers);
+        _map = Guard.AgainstNull(map);
+        _services = Guard.AgainstNull(services);
     }
 
     public ValueTask<Result> Send(IRequest request, CancellationToken cancellationToken = default)
@@ -27,12 +25,12 @@ internal sealed class Mediator : IMediator
         cancellationToken.ThrowIfCancellationRequested();
 
         Type requestType = request.GetType();
-        if (!_requestDispatchers.TryGetValue(requestType, out IMediatorRequestDispatcher? dispatcher))
+        if (!_map.TryGetRequestDispatcher(requestType, out MediatorRequestDispatcher? dispatcher))
         {
             ThrowMissingHandler(requestType);
         }
 
-        return dispatcher.Dispatch(request, cancellationToken);
+        return dispatcher.Dispatch(_services, request, cancellationToken);
     }
 
     public ValueTask<Result> Send<TRequest>(TRequest request, CancellationToken cancellationToken = default)
@@ -41,12 +39,12 @@ internal sealed class Mediator : IMediator
         Guard.AgainstNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!_requestDispatchers.TryGetValue(typeof(TRequest), out IMediatorRequestDispatcher? dispatcher))
+        if (!_map.TryGetRequestDispatcher(typeof(TRequest), out MediatorRequestDispatcher? dispatcher))
         {
             ThrowMissingHandler(typeof(TRequest));
         }
 
-        return dispatcher.Dispatch(request, cancellationToken);
+        return dispatcher.Dispatch(_services, request, cancellationToken);
     }
 
     public async ValueTask<Result<TResponse>> Send<TResponse>(
@@ -57,12 +55,12 @@ internal sealed class Mediator : IMediator
         cancellationToken.ThrowIfCancellationRequested();
 
         Type requestType = request.GetType();
-        if (!_responseDispatchers.TryGetValue((requestType, typeof(TResponse)), out IMediatorResponseDispatcher? dispatcher))
+        if (!_map.TryGetResponseDispatcher(requestType, typeof(TResponse), out MediatorResponseDispatcher? dispatcher))
         {
             ThrowMissingHandler(requestType);
         }
 
-        object result = await dispatcher.Dispatch(request, cancellationToken).ConfigureAwait(false);
+        object result = await dispatcher.Dispatch(_services, request, cancellationToken).ConfigureAwait(false);
 
         return (Result<TResponse>)result;
     }
@@ -75,47 +73,14 @@ internal sealed class Mediator : IMediator
         Guard.AgainstNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!_responseDispatchers.TryGetValue((typeof(TRequest), typeof(TResponse)), out IMediatorResponseDispatcher? dispatcher))
+        if (!_map.TryGetResponseDispatcher(typeof(TRequest), typeof(TResponse), out MediatorResponseDispatcher? dispatcher))
         {
             ThrowMissingHandler(typeof(TRequest));
         }
 
-        object result = await dispatcher.Dispatch(request, cancellationToken).ConfigureAwait(false);
+        object result = await dispatcher.Dispatch(_services, request, cancellationToken).ConfigureAwait(false);
 
         return (Result<TResponse>)result;
-    }
-
-    private static FrozenDictionary<Type, IMediatorRequestDispatcher> BuildRequestDispatchers(
-        IEnumerable<IMediatorRequestDispatcher> dispatchers)
-    {
-        Dictionary<Type, IMediatorRequestDispatcher> map = new();
-        foreach (IMediatorRequestDispatcher dispatcher in dispatchers)
-        {
-            if (!map.TryAdd(dispatcher.RequestType, dispatcher))
-            {
-                throw new InvalidOperationException(
-                    $"Multiple mediator handlers are registered for '{dispatcher.RequestType.FullName}'.");
-            }
-        }
-
-        return map.ToFrozenDictionary();
-    }
-
-    private static FrozenDictionary<(Type Request, Type Response), IMediatorResponseDispatcher> BuildResponseDispatchers(
-        IEnumerable<IMediatorResponseDispatcher> dispatchers)
-    {
-        Dictionary<(Type Request, Type Response), IMediatorResponseDispatcher> map = new();
-        foreach (IMediatorResponseDispatcher dispatcher in dispatchers)
-        {
-            var key = (dispatcher.RequestType, dispatcher.ResponseType);
-            if (!map.TryAdd(key, dispatcher))
-            {
-                throw new InvalidOperationException(
-                    $"Multiple mediator handlers are registered for '{dispatcher.RequestType.FullName}'.");
-            }
-        }
-
-        return map.ToFrozenDictionary();
     }
 
     [DoesNotReturn]

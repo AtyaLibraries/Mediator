@@ -1,91 +1,64 @@
-using System.ComponentModel;
 using Atya.Foundation.Results;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Atya.Application.Mediator;
 
 /// <summary>
-/// Dispatches an untyped request from generated registration metadata.
+/// Stateless dispatcher for an untyped request. It resolves the handler from the provider it is given.
 /// </summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public interface IMediatorRequestDispatcher
+internal abstract class MediatorRequestDispatcher
 {
-    /// <summary>
-    /// Gets the request type handled by this dispatcher.
-    /// </summary>
-    public Type RequestType { get; }
-
-    /// <summary>
-    /// Dispatches the request.
-    /// </summary>
-    /// <param name="request">The request instance.</param>
-    /// <param name="cancellationToken">A token that can cancel the operation.</param>
-    /// <returns>The handler result.</returns>
-    public ValueTask<Result> Dispatch(object request, CancellationToken cancellationToken);
+    public abstract ValueTask<Result> Dispatch(IServiceProvider services, object request, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// Dispatches a typed request from generated registration metadata.
+/// Stateless dispatcher for a typed request.
 /// </summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public interface IMediatorResponseDispatcher
+internal abstract class MediatorResponseDispatcher
 {
-    /// <summary>
-    /// Gets the request type handled by this dispatcher.
-    /// </summary>
-    public Type RequestType { get; }
-
-    /// <summary>
-    /// Gets the response value type returned by this dispatcher.
-    /// </summary>
-    public Type ResponseType { get; }
-
-    /// <summary>
-    /// Dispatches the request.
-    /// </summary>
-    /// <param name="request">The request instance.</param>
-    /// <param name="cancellationToken">A token that can cancel the operation.</param>
-    /// <returns>The handler result boxed as a typed result.</returns>
-    public ValueTask<object> Dispatch(object request, CancellationToken cancellationToken);
+    public abstract ValueTask<object> Dispatch(IServiceProvider services, object request, CancellationToken cancellationToken);
 }
 
-internal sealed class MediatorRequestDispatcher<TRequest> : IMediatorRequestDispatcher
+/// <remarks>
+/// Dispatchers resolve the concrete handler type, not the forwarding interface registration: a forwarding factory that
+/// returns an already tracked instance would make the container dispose that instance twice.
+/// </remarks>
+internal sealed class MediatorRequestDispatcher<TRequest, THandler> : MediatorRequestDispatcher
     where TRequest : class, IRequest
+    where THandler : class, IRequestHandler<TRequest>
 {
-    private readonly IRequestHandler<TRequest> _handler;
-
-    public MediatorRequestDispatcher(IRequestHandler<TRequest> handler)
-    {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        _handler = handler;
-    }
-
-    public Type RequestType => typeof(TRequest);
-
-    public ValueTask<Result> Dispatch(object request, CancellationToken cancellationToken) =>
-        _handler.Handle((TRequest)request, cancellationToken);
+    public override ValueTask<Result> Dispatch(IServiceProvider services, object request, CancellationToken cancellationToken) =>
+        services.GetRequiredService<THandler>().Handle((TRequest)request, cancellationToken);
 }
 
-internal sealed class MediatorResponseDispatcher<TRequest, TResponse> : IMediatorResponseDispatcher
+internal sealed class MediatorResponseDispatcher<TRequest, TResponse, THandler> : MediatorResponseDispatcher
     where TRequest : class, IRequest<TResponse>
+    where THandler : class, IRequestHandler<TRequest, TResponse>
 {
-    private readonly IRequestHandler<TRequest, TResponse> _handler;
-
-    public MediatorResponseDispatcher(IRequestHandler<TRequest, TResponse> handler)
+    public override async ValueTask<object> Dispatch(IServiceProvider services, object request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        _handler = handler;
-    }
-
-    public Type RequestType => typeof(TRequest);
-
-    public Type ResponseType => typeof(TResponse);
-
-    public async ValueTask<object> Dispatch(object request, CancellationToken cancellationToken)
-    {
-        Result<TResponse> result = await _handler.Handle((TRequest)request, cancellationToken).ConfigureAwait(false);
+        Result<TResponse> result = await services
+            .GetRequiredService<THandler>()
+            .Handle((TRequest)request, cancellationToken)
+            .ConfigureAwait(false);
 
         return result;
     }
+}
+
+/// <summary>A registration produced by <see cref="MediatorRegistrationBuilder"/>.</summary>
+internal sealed class MediatorMapEntry
+{
+    public MediatorMapEntry(Type requestType, Type? responseType, object dispatcher)
+    {
+        RequestType = requestType;
+        ResponseType = responseType;
+        Dispatcher = dispatcher;
+    }
+
+    public Type RequestType { get; }
+
+    public Type? ResponseType { get; }
+
+    public object Dispatcher { get; }
 }

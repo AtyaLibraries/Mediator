@@ -19,7 +19,9 @@ The package is intentionally narrow: it owns request dispatch, compile-time hand
 - Inference-friendly `await mediator.Send(query)` call sites.
 - Source-generated `services.AddAtyaMediator()` registration for compile-time-discovered handlers.
 - Reflection-free runtime dispatch through frozen runtime-type lookup tables.
-- Duplicate handler diagnostics at compile time.
+- Handlers are discovered whether they are classes or records, and every `IRequestHandler<>` interface of a type is registered.
+- Explicit handler lifetimes (`Transient` by default, `Scoped` or `Singleton` via `[MediatorHandlerLifetime]`).
+- Compile-time diagnostics `ATYAMEDIATOR001`-`005` for duplicate, open generic, inaccessible, conflicting-lifetime and abstract handlers.
 - Manual `MediatorRegistrationBuilder` registration as an escape hatch.
 
 ## Installation
@@ -160,6 +162,27 @@ services.AddAtyaMediator();
 
 The package includes a Roslyn source generator packaged as an analyzer asset. It discovers concrete `IRequestHandler<TRequest>` and `IRequestHandler<TRequest,TResponse>` implementations at compile time and emits deterministic registration code. If more than one handler targets the same request/response shape, the generator reports `ATYAMEDIATOR001` as a compile-time error.
 
+### Handler lifetimes
+
+Handlers are `Transient` unless annotated. `IMediator` is scoped and cheap: resolving it constructs no handlers, and each `Send` resolves exactly one handler from the current scope, whose container owns its disposal.
+
+```csharp
+[MediatorHandlerLifetime(MediatorHandlerLifetime.Scoped)]
+public sealed class GetOrderHandler : IRequestHandler<GetOrder, OrderSummary> { /* ... */ }
+```
+
+A type that implements several handler interfaces is registered once under its concrete type with one lifetime; each interface is forwarded to that registration, so a scoped handler is one instance per scope across all of its interfaces. Do not combine conflicting `[MediatorHandlerLifetime]` attributes on one type (`ATYAMEDIATOR004`).
+
+### Generator diagnostics
+
+| Id | Severity | Meaning |
+|---|---|---|
+| `ATYAMEDIATOR001` | Error | More than one handler for a request/response shape |
+| `ATYAMEDIATOR002` | Error | Open generic handler (close it or register it manually) |
+| `ATYAMEDIATOR003` | Error | Handler not accessible from generated code (private or private nested) |
+| `ATYAMEDIATOR004` | Error | Conflicting lifetime attributes on one handler |
+| `ATYAMEDIATOR005` | Warning | Abstract or static type implementing a handler interface is skipped |
+
 Manual registration remains available for tests and advanced composition:
 
 ```csharp
@@ -170,11 +193,19 @@ services.AddAtyaMediator(builder =>
 });
 ```
 
-Manual registration uses the same runtime dispatcher bridge as generated registration. The runtime does not scan assemblies.
+Manual registration takes an optional lifetime: `builder.AddRequestHandler<GetOrder, OrderSummary, GetOrderHandler>(MediatorHandlerLifetime.Scoped)`. It uses the same runtime dispatch as generated registration. The runtime does not scan assemblies.
 
 ## Deliberate Omissions
 
-v1 deliberately does not include pipeline behaviors, notifications, streaming requests, or handler lifetime policies beyond DI registration. Pipeline behaviors are planned as an additive `1.1.0` feature after the v1 dispatch and source-generation surface is stable.
+The package deliberately does not include pipeline behaviors, notifications, or streaming requests. Pipeline behaviors are planned as an additive `1.1.0` feature after the v1 dispatch and source-generation surface is stable.
+
+## Migrating from 1.x to 2.0
+
+- Handlers that 1.x silently skipped now register: handlers declared as `record` types, and the second and later `IRequestHandler<>` interface of a type. If you registered those by hand, remove the manual call; a manual duplicate throws at registration with the type named.
+- `IMediatorRequestDispatcher` and `IMediatorResponseDispatcher` are no longer public (they were `EditorBrowsable.Never`). Code that implemented or referenced them must stop.
+- `MediatorRegistrationBuilder.AddRequestHandler` gained an optional `lifetime` parameter (a binary-breaking signature change; recompile).
+- `IMediator` is still scoped, but resolving it no longer constructs every handler and holds them for the scope.
+- Handlers remain `Transient` unless annotated or registered with a lifetime.
 
 ## Why These Dependencies
 
