@@ -24,6 +24,7 @@ public static class MediatorServiceCollectionExtensions
         Guard.AgainstNull(services);
         Guard.AgainstNull(configure);
 
+        services.TryAddSingleton(static sp => new MediatorMap(sp.GetServices<MediatorMapEntry>()));
         services.TryAddScoped<IMediator, Mediator>();
         configure(new MediatorRegistrationBuilder(services));
 

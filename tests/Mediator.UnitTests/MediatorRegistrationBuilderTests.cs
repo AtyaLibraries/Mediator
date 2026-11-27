@@ -55,31 +55,60 @@ public sealed class MediatorRegistrationBuilderTests
     }
 
     [Fact]
-    public void AddAtyaMediator_DuplicateUntypedDispatcher_ThrowsWhenMediatorIsResolved()
+    public void AddAtyaMediator_DuplicateAcrossCalls_ThrowsWhenMediatorIsResolved()
     {
         ServiceCollection services = new();
-        services.AddAtyaMediator(_ => { });
-        services.AddSingleton<IMediatorRequestDispatcher>(new DuplicatePingDispatcher());
-        services.AddSingleton<IMediatorRequestDispatcher>(new DuplicatePingDispatcher());
+        services.AddAtyaMediator(builder => builder.AddRequestHandler<PingCommand, PingCommandHandler>());
+        services.AddAtyaMediator(builder => builder.AddRequestHandler<PingCommand, SecondPingCommandHandler>());
         using ServiceProvider provider = services.BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
 
-        Action act = () => _ = provider.GetRequiredService<IMediator>();
+        Action act = () => _ = scope.ServiceProvider.GetRequiredService<IMediator>();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*PingCommand*");
     }
 
     [Fact]
-    public void AddAtyaMediator_DuplicateTypedDispatcher_ThrowsWhenMediatorIsResolved()
+    public void AddAtyaMediator_DuplicateTypedAcrossCalls_ThrowsWhenMediatorIsResolved()
     {
         ServiceCollection services = new();
-        services.AddAtyaMediator(_ => { });
-        services.AddSingleton<IMediatorResponseDispatcher>(new DuplicateEchoDispatcher());
-        services.AddSingleton<IMediatorResponseDispatcher>(new DuplicateEchoDispatcher());
+        services.AddAtyaMediator(builder => builder.AddRequestHandler<EchoQuery, string, EchoQueryHandler>());
+        services.AddAtyaMediator(builder => builder.AddRequestHandler<EchoQuery, string, SecondEchoQueryHandler>());
         using ServiceProvider provider = services.BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
 
-        Action act = () => _ = provider.GetRequiredService<IMediator>();
+        Action act = () => _ = scope.ServiceProvider.GetRequiredService<IMediator>();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*EchoQuery*");
+    }
+
+    [Fact]
+    public void AddRequestHandler_SameHandlerTwoLifetimes_Throws()
+    {
+        MediatorRegistrationBuilder builder = new(new ServiceCollection());
+        builder.AddRequestHandler<PingCommand, TwoInterfaceHandler>(MediatorHandlerLifetime.Scoped);
+
+        Action act = () => builder.AddRequestHandler<EchoQuery, string, TwoInterfaceHandler>(MediatorHandlerLifetime.Transient);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*TwoInterfaceHandler*one lifetime*");
+    }
+
+    [Fact]
+    public void AddRequestHandler_UnknownLifetime_Throws()
+    {
+        MediatorRegistrationBuilder builder = new(new ServiceCollection());
+
+        Action untyped = () => builder.AddRequestHandler<PingCommand, PingCommandHandler>((MediatorHandlerLifetime)42);
+        Action typed = () => builder.AddRequestHandler<EchoQuery, string, EchoQueryHandler>((MediatorHandlerLifetime)42);
+
+        untyped.Should().Throw<ArgumentOutOfRangeException>();
+        typed.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void LifetimeAttribute_ExposesLifetime()
+    {
+        new MediatorHandlerLifetimeAttribute(MediatorHandlerLifetime.Singleton).Lifetime.Should().Be(MediatorHandlerLifetime.Singleton);
     }
 
     private sealed record class PingCommand : IRequest;
@@ -110,21 +139,12 @@ public sealed class MediatorRegistrationBuilderTests
             ValueTask.FromResult(global::Atya.Foundation.Results.Result.Success(request.Value));
     }
 
-    private sealed class DuplicatePingDispatcher : IMediatorRequestDispatcher
+    private sealed class TwoInterfaceHandler : IRequestHandler<PingCommand>, IRequestHandler<EchoQuery, string>
     {
-        public Type RequestType => typeof(PingCommand);
-
-        public ValueTask<global::Atya.Foundation.Results.Result> Dispatch(object request, CancellationToken cancellationToken) =>
+        public ValueTask<global::Atya.Foundation.Results.Result> Handle(PingCommand request, CancellationToken cancellationToken) =>
             ValueTask.FromResult(global::Atya.Foundation.Results.Result.Success());
-    }
 
-    private sealed class DuplicateEchoDispatcher : IMediatorResponseDispatcher
-    {
-        public Type RequestType => typeof(EchoQuery);
-
-        public Type ResponseType => typeof(string);
-
-        public ValueTask<object> Dispatch(object request, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<object>(global::Atya.Foundation.Results.Result.Success(string.Empty));
+        public ValueTask<global::Atya.Foundation.Results.Result<string>> Handle(EchoQuery request, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(global::Atya.Foundation.Results.Result.Success(request.Value));
     }
 }
