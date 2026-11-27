@@ -24,7 +24,6 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
-    <None Include="..\Mediator.SourceGeneration\bin\$(Configuration)\netstandard2.0\Atya.Application.Mediator.SourceGeneration.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup Label="Runtime dependency">
@@ -34,7 +33,15 @@
   </ItemGroup>
 
   <ItemGroup Label="Analyzer dependency">
-    <ProjectReference Include="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" OutputItemType="MediatorGeneratorAssembly" />
   </ItemGroup>
+
+  <!-- Pack the generator exactly as built for the current configuration: the path comes from the project reference
+       output, so a Release pack cannot ship a stale or missing DLL from another configuration. -->
+  <Target Name="IncludeMediatorGeneratorInPackage" BeforeTargets="_GetPackageFiles" DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <None Include="@(MediatorGeneratorAssembly->Distinct())" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
+  </Target>
 
 </Project>
