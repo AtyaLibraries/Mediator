@@ -38,8 +38,24 @@
 
   <!-- Pack the generator exactly as built for the current configuration: the path comes from the project reference
        output, so a Release pack cannot ship a stale or missing DLL from another configuration. -->
+  <!-- The symbol package must carry the generator PDB at the same path as the analyzer DLL in the primary package. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificDebugSymbolsInPackage>$(TargetsForTfmSpecificDebugSymbolsInPackage);IncludeMediatorGeneratorSymbols</TargetsForTfmSpecificDebugSymbolsInPackage>
+  </PropertyGroup>
+
+  <Target Name="IncludeMediatorGeneratorSymbols">
+    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
+      <Output TaskParameter="TargetOutputs" ItemName="MediatorGeneratorSymbolsAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificDebugSymbolsFile Include="@(MediatorGeneratorSymbolsAssembly->'%(RootDir)%(Directory)%(Filename).pdb')"
+                                   TargetPath="/analyzers/dotnet/cs/%(Filename).pdb"
+                                   TargetFramework="netstandard2.0" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="IncludeMediatorGeneratorInPackage" BeforeTargets="_GetPackageFiles">
-    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="MediatorGeneratorAssembly" />
     </MSBuild>
     <ItemGroup>
