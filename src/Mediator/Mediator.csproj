@@ -44,7 +44,7 @@
   </PropertyGroup>
 
   <Target Name="IncludeMediatorGeneratorSymbols">
-    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="MediatorGeneratorSymbolsAssembly" />
     </MSBuild>
     <ItemGroup>
@@ -55,7 +55,7 @@
   </Target>
 
   <Target Name="IncludeMediatorGeneratorInPackage" BeforeTargets="_GetPackageFiles">
-    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+    <MSBuild Projects="..\Mediator.SourceGeneration\Mediator.SourceGeneration.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="MediatorGeneratorAssembly" />
     </MSBuild>
     <ItemGroup>
