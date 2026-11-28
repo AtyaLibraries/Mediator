@@ -12,7 +12,7 @@
     <PackageTags>dotnet;atya;mediator;source-generator;results</PackageTags>
     <RepositoryUrl>https://github.com/AtyaLibraries/Mediator</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageValidationBaselineVersion>1.0.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>2.0.1</PackageValidationBaselineVersion>
 
     <!-- MinVer derives the version from git tags (e.g. tag `v1.2.3` -> 1.2.3). -->
     <MinVerTagPrefix>v</MinVerTagPrefix>
